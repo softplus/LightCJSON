@@ -43,4 +43,7 @@ char *jsonUnescape(const char *json, char *dest, int size);
 char *jsonQuote(const char *input, char *dest, int size);
 char *jsonUnquote(const char *input, char *dest, int size);
 
+// key value builder
+char *jsonAppendItem(const char *key, const char *value, char *dest, int size);
+  
 #endif

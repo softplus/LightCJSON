@@ -254,3 +254,27 @@ char *jsonUnquote(const char *input, char *dest, int size) {
   dest[strlen(dest)-1] = '\0';
   return dest;
 }
+
+// key-value pair builder
+char *jsonAppendItem(const char *key, const char *value, char *dest, int size) {
+  // check min room
+  if (size < strlen(dest) + strlen(key) + strlen(value) + 5+2) {
+    return NULL;
+  }
+  if (strlen(dest)==0) sprintf(dest, "{}");
+
+  int rem = size-strlen(dest);
+  if (strlen(dest)>2) strcpy(dest + strlen(dest)-1, ",}\0");
+
+  rem = size-strlen(dest);
+  jsonQuote(key, dest + strlen(dest) - 1, rem);
+
+  strcpy(dest + strlen(dest), ":\0");
+
+  rem = size-strlen(dest);
+  jsonQuote(value, dest + strlen(dest), rem);
+
+  strcpy(dest + strlen(dest), "}\0");
+
+  return dest;
+}

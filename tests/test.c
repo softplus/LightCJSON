@@ -20,6 +20,10 @@ int test_jsonEscape();
 int test_jsonQuote();
 int t_func(char *input, char *expected, functiontype3 f, char *name);
 
+//char *jsonAppendItem(const char *key, const char *value, char *dest, int size);
+int test_jsonAppendItem();
+int t_jsonAppendItem();
+
 int main() {
     printf("\nSimple tests of lightcjson\n\n");
     int fail=0;
@@ -29,10 +33,40 @@ int main() {
     fail += test_jsonExtract();
     fail += test_jsonEscape();
     fail += test_jsonQuote();
+    fail += test_jsonAppendItem();
 
     printf("\nTests failed: %d\n", fail);
     return 0;
 }
+
+
+//char *jsonAppendItem(const char *key, const char *value, char *dest, int size);
+int test_jsonAppendItem() {
+    int fail = 0;
+
+    char buff[1024];
+    char exp[1024];
+    buff[0] = '\0';
+    printf("jsonAppendItem()\n");
+    jsonAppendItem("key", "value", buff, sizeof(buff));
+    sprintf(exp, "%s", "{\"key\":\"value\"}");
+    printf("  is: '%s', expected: '%s'\n", buff, exp);
+    if (strcmp(buff, exp) != 0) {
+        fail++; printf("  FAIL\n");
+    }
+
+    jsonAppendItem("key2", "val\"ue2", buff, sizeof(buff));
+    sprintf(exp, "%s", "{\"key\":\"value\",\"key2\":\"val\\\"ue2\"}");
+    printf("  is: '%s', expected: '%s'\n", buff, exp);
+    if (strcmp(buff, exp) != 0) {
+        fail++; printf("  FAIL\n");
+    }
+}
+
+int t_jsonAppendItem() {
+//
+}
+
 
 //char *jsonEscape(const char *input, char *dest, int size);
 //char *jsonUnescape(const char *json, char *dest, int size);
