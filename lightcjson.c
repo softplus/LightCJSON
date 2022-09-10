@@ -129,7 +129,6 @@ char *jsonIndexList(const char *json, int index, char *dest, int size) {
   return NULL;
 }
 
-// todo: rewrite
 // return a sub-json struct
 char *jsonExtract(const char *json, const char *key_name, char *dest, int size) {
   char *ptr_start, *ptr_end;
