@@ -20,13 +20,21 @@ int test_jsonEscape();
 int test_jsonQuote();
 int t_func(char *input, char *expected, functiontype3 f, char *name);
 
-//char *jsonAppendItem(const char *key, const char *value, char *dest, int size);
+int test_jsonGetKeyValue();
+int t_jsonGetKeyValue(char *input, char *expect_key, char *expect_value, int expect_null);
+
 int test_jsonAppendItem();
 int t_jsonAppendItem();
+
+int test_jsonStreamKeyValues();
+
+int expect_num(int is, int expect, char *name);
+int expect_str(char *is, char *expect, char *name);
 
 int main() {
     printf("\nSimple tests of lightcjson\n\n");
     int fail=0;
+    if (1==2) {
     fail += test_jsonTrim();
     fail += test_jsonRemoveSpacing();
     fail += test_jsonIndexList();
@@ -34,11 +42,276 @@ int main() {
     fail += test_jsonEscape();
     fail += test_jsonQuote();
     fail += test_jsonAppendItem();
+    fail += test_jsonGetKeyValue();
+    }
+    fail += test_jsonStreamKeyValues();
 
     printf("\nTests failed: %d\n", fail);
     return 0;
 }
 
+
+
+// returns offset to next key/value pair, or 0 for none remaining here.
+// returns 0 when time to add new_input
+// returns -1 on buffer overfill
+// set start_offset = last_offset to continue parsing
+// buffer should be >2x new_input size, >2x+5 max key+value size
+// skips named structs ("key":{"item":"value"}), and lists. ("key":["a","b"])
+//int jsonStreamKeyValues(const char *new_input, char *buffer, int max_buffer, 
+//    int start_offset, int *last_offset) {
+
+int test_jsonStreamKeyValues() {
+    char buff[30], in[200];
+    int pos, last_offset;
+    int err=0;
+
+    printf("jsonStreamKeyValues():\n");
+    buff[0]='\0';
+    strcpy(in, "{\"key\":1");
+    printf("buf='%s'\n", in);
+    pos = jsonStreamKeyValues(in, buff, sizeof(buff), 0, &last_offset);
+    err += expect_num(pos, 0, "return");
+    err += expect_num(last_offset, 0, "last_offset");
+    if (err) return err;
+
+    printf("\n");
+    strcpy(in, "}");
+    printf("buf+='%s'\n", in);
+    pos = jsonStreamKeyValues(in, buff, sizeof(buff), last_offset, &last_offset);
+    err += expect_num(pos, 1, "return");
+    err += expect_num(last_offset, 8, "last_offset");
+    err += t_jsonGetKeyValue(buff+pos, "key", "1", 0);
+    if (err) return err;
+
+    printf("\n");
+    pos = jsonStreamKeyValues(NULL, buff, sizeof(buff), last_offset, &last_offset);
+    err += expect_num(pos, 0, "return");
+    err += expect_num(last_offset, 9, "last_offset");
+    if (err) return err;
+
+    printf("\n");
+    strcpy(in, ",\"1234567890abc");
+    printf("buf+='%s'\n", in);
+    pos = jsonStreamKeyValues(in, buff, sizeof(buff), last_offset, &last_offset);
+    err += expect_num(pos, 0, "return");
+    err += expect_num(last_offset, 9, "last_offset");
+    if (err) return err;
+
+    printf("\n");
+    strcpy(in, "123");
+    printf("buf+='%s'\n", in);
+    pos = jsonStreamKeyValues(in, buff, sizeof(buff), last_offset, &last_offset);
+    err += expect_num(pos, 0, "return");
+    err += expect_num(last_offset, 9, "last_offset");
+    if (err) return err;
+
+    printf("\n");
+    strcpy(in, "123\":2");
+    printf("buf+='%s'\n", in);
+    pos = jsonStreamKeyValues(in, buff, sizeof(buff), last_offset, &last_offset);
+    err += expect_num(pos, 0, "return");
+    err += expect_num(last_offset, 2, "last_offset");
+    if (err) return err;
+
+    printf("\n");
+    strcpy(in, ",");
+    printf("buf+='%s'\n", in);
+    pos = jsonStreamKeyValues(in, buff, sizeof(buff), last_offset, &last_offset);
+    err += expect_num(pos, 3, "return");
+    err += expect_num(last_offset, 26, "last_offset");
+    err += t_jsonGetKeyValue(buff+pos, "1234567890abc123123", "2", 0);
+    if (err) return err;
+
+    printf("\n");
+    pos = jsonStreamKeyValues(NULL, buff, sizeof(buff), last_offset, &last_offset);
+    err += expect_num(pos, 0, "return");
+    err += expect_num(last_offset, 27, "last_offset");
+    if (err) return err;
+
+    printf("\n");
+    strcpy(in, "\"k\": \"v\"");
+    printf("buf+='%s'\n", in);
+    pos = jsonStreamKeyValues(in, buff, sizeof(buff), last_offset, &last_offset);
+    err += expect_num(pos, 18, "return");
+    err += expect_num(last_offset, 26, "last_offset");
+    err += t_jsonGetKeyValue(buff+pos, "k", "\"v\"", 0);
+    if (err) return err;
+
+    printf("\n");
+    pos = jsonStreamKeyValues(NULL, buff, sizeof(buff), last_offset, &last_offset);
+    err += expect_num(pos, 0, "return");
+    err += expect_num(last_offset, 26, "last_offset");
+    if (err) return err;
+
+    printf("\n");
+    strcpy(in, ",\"c\": {\"w\":\"v\"}");
+    printf("buf+='%s'\n", in);
+    pos = jsonStreamKeyValues(in, buff, sizeof(buff), last_offset, &last_offset);
+    err += expect_num(pos, 17, "return");
+    err += expect_num(last_offset, 24, "last_offset");
+    err += t_jsonGetKeyValue(buff+pos, "w", "\"v\"", 0);
+    if (err) return err;
+
+    printf("\n");
+    pos = jsonStreamKeyValues(NULL, buff, sizeof(buff), last_offset, &last_offset);
+    err += expect_num(pos, 0, "return");
+    err += expect_num(last_offset, 25, "last_offset");
+    if (err) return err;
+
+    printf("\n");
+    strcpy(in, ",\"a\":\"b\",\"c\":2,\"d");
+    printf("buf+='%s'\n", in);
+    pos = jsonStreamKeyValues(in, buff, sizeof(buff), last_offset, &last_offset);
+    err += expect_num(pos, 8, "return");
+    err += expect_num(last_offset, 15, "last_offset");
+    err += t_jsonGetKeyValue(buff+pos, "a", "\"b\"", 0);
+    if (err) return err;
+
+    printf("\n");
+    pos = jsonStreamKeyValues(NULL, buff, sizeof(buff), last_offset, &last_offset);
+    err += expect_num(pos, 16, "return");
+    err += expect_num(last_offset, 21, "last_offset");
+    err += t_jsonGetKeyValue(buff+pos, "c", "2", 0);
+    if (err) return err;
+
+    printf("\n");
+    pos = jsonStreamKeyValues(NULL, buff, sizeof(buff), last_offset, &last_offset);
+    err += expect_num(pos, 0, "return");
+    err += expect_num(last_offset, 21, "last_offset");
+    if (err) return err;
+
+    printf("\n");
+    strcpy(in, "\",\"a\":[1,2],\"c\":2,\"d");
+    printf("buf+='%s'\n", in);
+    pos = jsonStreamKeyValues(in, buff, sizeof(buff), last_offset, &last_offset);
+    err += expect_num(pos, 15, "return");
+    err += expect_num(last_offset, 20, "last_offset");
+    err += t_jsonGetKeyValue(buff+pos, "c", "2", 0);
+    if (err) return err;
+
+    printf("\n");
+    pos = jsonStreamKeyValues(NULL, buff, sizeof(buff), last_offset, &last_offset);
+    err += expect_num(pos, 0, "return");
+    err += expect_num(last_offset, 20, "last_offset");
+    if (err) return err;
+
+    printf("\n");
+    strcpy(in, "\",\"1234567890abc");
+    printf("buf+='%s'\n", in);
+    pos = jsonStreamKeyValues(in, buff, sizeof(buff), last_offset, &last_offset);
+    err += expect_num(pos, 0, "return");
+    err += expect_num(last_offset, 7, "last_offset");
+    if (err) return err;
+
+    printf("\n");
+    strcpy(in, "1234567890abc");
+    printf("buf+='%s'\n", in);
+    pos = jsonStreamKeyValues(in, buff, sizeof(buff), last_offset, &last_offset);
+    err += expect_num(pos, -1, "return");
+    err += expect_num(last_offset, 7, "last_offset");
+    if (err) return err;
+
+    printf("\n");
+    strcpy(in, "\":123");
+    printf("buf+='%s'\n", in);
+    pos = jsonStreamKeyValues(in, buff, sizeof(buff), last_offset, &last_offset);
+    err += expect_num(pos, 0, "return");
+    err += expect_num(last_offset, 7, "last_offset");
+    if (err) return err;
+
+    printf("\n");
+    strcpy(in, "1234");
+    printf("buf+='%s'\n", in);
+    pos = jsonStreamKeyValues(in, buff, sizeof(buff), last_offset, &last_offset);
+    err += expect_num(pos, 0, "return");
+    err += expect_num(last_offset, 2, "last_offset");
+    if (err) return err;
+
+    printf("\n");
+    strcpy(in, ",");
+    printf("buf+='%s'\n", in);
+    pos = jsonStreamKeyValues(in, buff, sizeof(buff), last_offset, &last_offset);
+    err += expect_num(pos, 3, "return");
+    err += expect_num(last_offset, 26, "last_offset");
+    err += t_jsonGetKeyValue(buff+pos, "1234567890abc", "1231234", 0);
+    if (err) return err;
+
+    printf("\n");
+    pos = jsonStreamKeyValues(NULL, buff, sizeof(buff), last_offset, &last_offset);
+    err += expect_num(pos, 0, "return");
+    err += expect_num(last_offset, 27, "last_offset");
+    if (err) return err;
+
+    printf("Tests failed: %d\n\n", err);
+
+    return err;
+}
+
+int expect_num(int is, int expect, char *name) {
+    if (expect != is) {
+        printf("  %s: expected %d, was %d\n", name, expect, is);
+        return 1;
+    }
+    return 0;
+}
+
+int expect_str(char *is, char *expect, char *name) {
+    if (strcmp(expect,is)!=0) {
+        printf("  %s: expected %s, was %s\n", name, expect, is);
+        return 1;
+    }
+    return 0;
+}
+
+
+int test_jsonGetKeyValue() {
+    int run=0, fail=0;
+
+    run++; fail+=t_jsonGetKeyValue("", "", "", 1);
+    run++; fail+=t_jsonGetKeyValue("abc", "", "", 1);
+    run++; fail+=t_jsonGetKeyValue("\"key\":", "key", "", 0);
+    run++; fail+=t_jsonGetKeyValue("\"key\": ", "key", "", 0);
+    run++; fail+=t_jsonGetKeyValue("\"k\":0", "k", "0", 0);
+    run++; fail+=t_jsonGetKeyValue("\"k\":1,", "k", "1", 0);
+    run++; fail+=t_jsonGetKeyValue("\"k\":    1,", "k", "1", 0);
+    run++; fail+=t_jsonGetKeyValue("\"k\":\"1\",", "k", "\"1\"", 0);
+    run++; fail+=t_jsonGetKeyValue("\"k\":\"1\",\"c\":2", "k", "\"1\"", 0);
+ 
+    printf("Tests run: %d, failed: %d\n\n", run, fail);
+    return fail;
+
+}
+
+int t_jsonGetKeyValue(char *input, char *expect_key, char *expect_value, int expect_null) {
+    //int jsonGetKeyValue(const char *input, char *key, char *value, int item_size) {
+    char buff_key[1024];
+    char buff_val[1024];
+    int err = 0, ret = 0;
+
+    //int jsonGetKeyValue(const char *input, char *key, char *value, int item_size) {
+    printf("jsonGetKeyValue(%s):", input);
+    ret = jsonGetKeyValue(input, buff_key, buff_val, sizeof(buff_key));
+    if (expect_null) {
+        printf("  is: %s - expected: %s\n", (ret==0)?"0":"NOT-0", "0");
+        if (ret!=0) {
+            printf("  FAILED: result code mismatch\n"); err++;
+        }
+    } else {
+        printf("  is: %s=%s - expected: %s=%s\n", 
+            buff_key, buff_val, expect_key, expect_value);
+        if (ret != 1) {
+            printf("  FAILED: result code mismatch\n"); err++;
+        }
+        if (strcmp(buff_key, expect_key)!=0) {
+            printf("  FAILED: result key mismatch\n"); err++;
+        }
+        if (strcmp(buff_val, expect_value)!=0) {
+            printf("  FAILED: result value mismatch\n"); err++;
+        }
+    }
+    return err;
+}
 
 //char *jsonAppendItem(const char *key, const char *value, char *dest, int size);
 int test_jsonAppendItem() {
@@ -61,10 +334,12 @@ int test_jsonAppendItem() {
     if (strcmp(buff, exp) != 0) {
         fail++; printf("  FAIL\n");
     }
+    return fail;
 }
 
 int t_jsonAppendItem() {
-//
+    // todo, maybe
+    return 0;
 }
 
 

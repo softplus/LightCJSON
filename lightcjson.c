@@ -278,3 +278,137 @@ char *jsonAppendItem(const char *key, const char *value, char *dest, int size) {
 
   return dest;
 }
+
+// extract key-value JSON pair at position
+// returns 1=ok, 0=error
+int jsonGetKeyValue(const char *input, char *key, char *value, int item_size) {
+  // expected: "key":"value" -> key, value
+  // or "ke\"y":123 -> ke"y, 123
+  // skips rest of input
+  char *ptr_in = (char *)input;
+  char *ptr_out;
+  // expected: key is string
+  if (!is_doublequote_(*ptr_in)) { return 0; }
+  ptr_in++; 
+
+  char prev = *ptr_in;
+  ptr_out = key;
+  while (*ptr_in) {
+    if (is_doublequote_(*ptr_in) && (!is_escape_(prev))) break;
+    if (!is_escape_(*ptr_in) || is_escape_(prev)) {
+      *ptr_out=*ptr_in; ptr_out++;
+    } 
+    prev = *ptr_in; ptr_in++;
+    if ((ptr_out-key)>item_size-1) return 0; // ran out of room for key name
+  }
+  *ptr_out = '\0';
+  // have key, just fetch now
+  char *ret = jsonExtract(input, key, value, item_size);
+  return ((ret!=NULL)?1:0); 
+}
+
+// returns offset to next key/value pair, or 0 for none remaining here.
+// returns 0 when time to add new_input
+// returns -1 on buffer overfill
+// set start_offset = last_offset to continue parsing
+// buffer should be >2x new_input size, >2x+5 max key+value size
+// skips named structs ("key":{"item":"value"}), and lists. ("key":["a","b"])
+#define JKVERR 
+int jsonStreamKeyValues(const char *new_input, char *buffer, int max_buffer, 
+    int start_offset, int *last_offset) {
+  //printf(">jskv(in l=%d, buff l=%d, so=%d)\n", 
+  //  (int)((new_input!=NULL)?strlen(new_input):0), (int)strlen(buffer), start_offset);
+  int new_start_offset = start_offset;
+  if (new_input) { // add to buffer 
+    //printf("adding to buffer\n");
+    if (strlen(new_input) + strlen(buffer)<max_buffer-1) { // just append
+      //printf("just append\n");
+      int max_len = max_buffer -1 - strlen(buffer);
+      strncpy(buffer+strlen(buffer), new_input, max_len);  
+    } else { // shift by new buffer item
+      if (strlen(new_input)+max_buffer-start_offset>max_buffer-1) { 
+        //printf("err: no room\n"); 
+        return -1; 
+      }
+      //printf("offset\n");
+      int offset=1+strlen(new_input);
+      //printf("delta=%i\n", offset);
+      char *ptr = buffer;
+      while (*(ptr+offset)) { *ptr = *(ptr+offset); ptr++; }
+      strncpy(ptr, new_input, max_buffer-(ptr-buffer));
+      new_start_offset = start_offset - offset;      
+      if (new_start_offset<0) {
+        //printf("not enough buffer to parse\n"); 
+        return -1;
+      }
+    }
+  }
+  //printf("buff='%s'\n", buffer);
+  //printf("buff len=%d, start=%d (%c)\n", (int)strlen(buffer), new_start_offset, *(buffer+new_start_offset));
+  // read until quote
+  char *ptr = buffer + new_start_offset;
+  while ((!is_doublequote_(*ptr)) && *ptr) ptr++;
+  if (!*ptr) { 
+    //printf("no quotes found\n");
+    *last_offset = ptr-buffer; return 0; } // no quotes found
+  char *key_start = ptr; // ptr is at start of key
+
+  char prev=*ptr; ptr++;
+  while (*ptr && !(is_doublequote_(*ptr) || is_escape_(prev))) {
+    prev = *ptr; ptr++;
+  }
+  if (!*ptr) { 
+    //printf("end of string in key\n");
+    *last_offset = new_start_offset; return 0; }
+  // ptr is at end of quote for key
+  //printf("got key\n");
+  // expect ":"
+  ptr++; 
+  if (!*ptr) {
+    //printf("end of string before : after key\n");
+    *last_offset = new_start_offset; return 0; }
+  if (*ptr!=':') { // if no :, try from here
+    //printf("no : found after key (got %c)\n", *ptr);
+    return jsonStreamKeyValues(NULL, buffer, max_buffer, (ptr-buffer), last_offset);
+  }
+  ptr++;
+  // await: number, quote, comma, {, }, [, ]
+  while (*ptr && is_space_(*ptr)) ptr++;
+  if (!*ptr) { 
+    //printf("end of string before value\n");
+    *last_offset = new_start_offset; return 0; }
+  if (is_bracket_open_(*ptr) || is_bracket_close_(*ptr) || (*ptr==',')) {
+    //printf("got bracket or comma (%c), restart\n", *ptr);
+    return jsonStreamKeyValues(NULL, buffer, max_buffer, (ptr-buffer), last_offset);
+  }
+  if ((*ptr=='-') || is_number_(*ptr)) {
+    //printf("got number\n");
+    ptr++;
+    while ((*ptr) && (is_number_(*ptr) || (*ptr=='.'))) ptr++;
+    if (!*ptr) { 
+      //printf("end of string before end of value\n");
+      *last_offset = new_start_offset; return 0; }
+    // looks ok, let's push it
+    //printf("got value complete\n");
+    *last_offset = (ptr-buffer);
+    return (key_start-buffer);
+  } else if (*ptr=='"') {
+    //printf("got string\n");
+    ptr++;prev=*ptr;
+    while (*ptr && !(is_doublequote_(*ptr) || is_escape_(prev))) {
+      prev = *ptr; ptr++;
+    }
+    if (!*ptr) { 
+      //printf("end of string before end of value\n");
+      *last_offset = new_start_offset; return 0; }
+    // looks ok
+    //printf("got value complete\n");
+    ptr++;
+    *last_offset = (ptr-buffer);
+    return (key_start-buffer);
+  }
+  //printf("json wonky, restart\n");
+  // broken json, just continue from here
+  return jsonStreamKeyValues(NULL, buffer, max_buffer, (ptr-buffer), last_offset);
+}
+

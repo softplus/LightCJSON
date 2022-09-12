@@ -46,4 +46,8 @@ char *jsonUnquote(const char *input, char *dest, int size);
 // key value builder
 char *jsonAppendItem(const char *key, const char *value, char *dest, int size);
   
+int jsonGetKeyValue(const char *input, char *key, char *value, int item_size);
+int jsonStreamKeyValues(const char *new_input, char *buffer, int max_buffer, 
+    int start_offset, int *last_offset);
+
 #endif
