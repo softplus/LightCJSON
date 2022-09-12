@@ -32,7 +32,6 @@ int expect_str(char *is, char *expect, char *name);
 int main() {
     printf("\nSimple tests of lightcjson\n\n");
     int fail=0;
-    if (1==2) {
     fail += test_jsonTrim();
     fail += test_jsonRemoveSpacing();
     fail += test_jsonIndexList();
@@ -41,7 +40,6 @@ int main() {
     fail += test_jsonQuote();
     fail += test_jsonAppendItem();
     fail += test_jsonGetKeyValue();
-    }
     fail += test_jsonStreamKeyValues();
 
     printf("\nTests failed: %d\n", fail);
