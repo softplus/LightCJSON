@@ -24,8 +24,6 @@ int test_jsonGetKeyValue();
 int t_jsonGetKeyValue(char *input, char *expect_key, char *expect_value, int expect_null);
 
 int test_jsonAppendItem();
-int t_jsonAppendItem();
-
 int test_jsonStreamKeyValues();
 
 int expect_num(int is, int expect, char *name);
@@ -335,11 +333,6 @@ int test_jsonAppendItem() {
         fail++; printf("  FAIL\n");
     }
     return fail;
-}
-
-int t_jsonAppendItem() {
-    // todo, maybe
-    return 0;
 }
 
 

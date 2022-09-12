@@ -5,10 +5,9 @@ Inspired by [wyolum/jsonlib](https://github.com/wyolum/jsonlib).
 
 ## Todo's
 
-* Make streaming key/value parser
-* Figure out how to make it
 * Help file
 
 ## Done
 
 * Make simple key/value builder
+* Make streaming key/value parser
